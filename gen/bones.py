@@ -164,121 +164,190 @@ def _spine_lean(reg, n):
     return 0.0
 
 
+def _taper_plate(length, base_w, tip_w, lean_deg, t_base, t_tip, tip_round=True, n_arc=6):
+    """根元が広く・厚く、先へ細く・薄くなる突起の輪郭と厚み関数。
+
+    面内: x = 根元→先端, y = 前後。先端は半円で丸める（角ばった板に見えないように）。
+    """
+    lr = math.tan(math.radians(lean_deg))
+    tip_c = (length - tip_w * 0.5, (length - tip_w * 0.5) * lr)
+    poly = [(0.0, -base_w * 0.5), (length * 0.35, -base_w * 0.36 + length * 0.35 * lr)]
+    if tip_round:
+        for k in range(n_arc + 1):
+            a = -math.pi / 2 + math.pi * k / n_arc
+            poly.append((tip_c[0] + math.cos(a) * tip_w * 0.5, tip_c[1] + math.sin(a) * tip_w * 0.5))
+    else:
+        poly += [(length, tip_c[1] - tip_w * 0.5), (length, tip_c[1] + tip_w * 0.5)]
+    poly += [(length * 0.35, base_w * 0.36 + length * 0.35 * lr), (0.0, base_w * 0.5)]
+
+    def thick(x, y):
+        t = np.clip(np.asarray(x) / length, 0.0, 1.0)
+        return t_base + (t_tip - t_base) * t ** 0.7
+
+    return poly, thick
+
+
+def _tplate(poly, thick, origin, u, v, name=""):
+    u = unit(u)
+    v = np.asarray(v, dtype=float)
+    v = unit(v - u * float(np.dot(v, u)))
+    R = np.column_stack([u, v, np.cross(u, v)])
+    return Plate(poly, thick, corner_r=0.0, xform=(R, np.asarray(origin, dtype=float)), name=name)
+
+
+CANAL = {"C": 6.2, "T": 5.0, "L": 5.6, "S": 4.2}
+
+
 def vertebra(key):
+    """椎骨1個。
+
+    最初の版は «角を丸めた箱を積んだだけ» で、棘突起は同じ厚みの平板、
+    椎弓も箱、つなぎ目はただ重ねただけだったので、標本に見えなかった。
+    ここでは
+      - 椎弓は «ブロックから椎孔をくり抜いた輪»
+      - 棘突起・横突起は «根元が厚く先が薄く、先端が丸い» テーパー板
+      - 前後の関節突起を付ける
+      - 部品は滑らかな和（k 小さめ）でつなぐ
+    """
     v = VERT[key]
     reg, n, c, d, up, left, L = v["reg"], v["n"], v["c"], v["d"], v["up"], v["left"], v["L"]
     R = np.column_stack([left, up, d])
-    parts = []
 
     if reg == "Cd":
         k = (n - 1) / 19.0
         r = lerp(6.0, 2.0, k ** 0.8)
         a = c - d * (L * 0.5)
         b = c + d * (L * 0.5)
-        parts.append(Chain([a, c, b], [r * 1.12, r * 0.82, r * 1.12], name=key))
+        parts = [Chain([a, c, b], [r * 1.12, r * 0.80, r * 1.12])]
         if n <= 6:
             tl = lerp(9.0, 3.0, (n - 1) / 5.0)
             for sg in (1, -1):
                 parts.append(RoundCone(c - d * (L * 0.15), c + left * (sg * (r + tl))
-                                       + d * (L * 0.05), 2.0, 1.3))
+                                       + d * (L * 0.05), 2.0, 1.2))
             if n <= 4:
                 parts.append(RoundCone(c + up * (r * 0.9) - d * (L * 0.3),
-                                       c + up * (r * 1.6), 1.8, 1.2))
-        return ops.Union(parts, name=key) if len(parts) > 1 else parts[0]
+                                       c + up * (r * 1.7), 1.8, 1.1))
+                for sg in (1, -1):   # 小さな前関節突起
+                    parts.append(Sphere(c + up * (r * 0.9) + left * (sg * r * 0.6) - d * (L * 0.48), 1.4))
+        if len(parts) == 1:
+            return parts[0]
+        return ops.SmoothUnion(parts, k=1.2, name=key)
 
     h, w = BODY_HW[reg]
+    rc = CANAL[reg]
+    parts = []
 
-    # 椎体
-    if not (reg == "C" and n == 1):
-        parts.append(Box((w * 0.5, h * 0.5, L * 0.5), round_r=min(h, w) * 0.48,
-                         xform=(R, c)))
-
-    # 椎弓（椎孔を残して輪にする）
-    canal = 6.0 if reg != "S" else 4.5
-    top = h * 0.5 + canal * 1.5 + 2.4
-    arch_len = L * (0.42 if reg != "C" else 0.40)
+    # ── 環椎（C1）: 椎体が無い輪＋大きな翼 ──────────────────────
     if reg == "C" and n == 1:
-        # 環椎: 椎体が無く、腹側弓・背側弓・大きな翼
+        ring_c = c + up * 2.0
+        ring = ops.Difference([
+            Ellipsoid((rc + 5.0, rc + 5.0, L * 0.45), xform=(R, ring_c)),
+            Chain([ring_c - d * L, ring_c + d * L], [rc + 0.6, rc + 0.6]),
+        ])
+        parts.append(ring)
         for sg in (1, -1):
-            parts.append(Box((2.6, canal + 3, L * 0.42), round_r=1.5,
-                             xform=(R, c + left * (sg * (canal + 2.0)))))
-        parts.append(Box((canal + 3.5, 2.2, L * 0.40), round_r=1.5,
-                         xform=(R, c + up * (canal + 2.0))))
-        parts.append(Box((canal + 2.5, 2.4, L * 0.30), round_r=1.5,
-                         xform=(R, c - up * (canal + 1.0))))
-        for sg in (1, -1):
-            parts.append(plate([(0, -L * 0.62), (24, -L * 0.55), (27, L * 0.40),
-                                (0, L * 0.55)], 3.2, c + left * (sg * (canal + 2.5)),
-                               left * sg, d, corner=2.5))
-        return ops.Union(parts, name=key)
+            poly, th = _taper_plate(22.0, L * 1.05, L * 0.80, 0.0, 4.0, 2.2, n_arc=8)
+            parts.append(_tplate(poly, th, ring_c + left * (sg * (rc + 2.5)) - up * 1.0,
+                                 unit(left * sg - up * 0.25), d))
+        parts.append(Ellipsoid((3.0, 2.0, 3.0), xform=(R, ring_c + up * (rc + 4.6))))  # 背側結節
+        return ops.SmoothUnion(parts, k=2.0, name=key)
 
-    for sg in (1, -1):
-        parts.append(Box((2.4, (top - h * 0.3) * 0.5, arch_len), round_r=1.0,
-                         xform=(R, c + left * (sg * (canal + 1.6))
-                                + up * ((top + h * 0.3) * 0.5))))
-    parts.append(Box((canal + 4.0, 2.4, arch_len), round_r=1.0,
-                     xform=(R, c + up * top)))
-    # 関節突起（前後）
-    for sg in (1, -1):
-        for fb in (-1, 1):
-            parts.append(Sphere(c + left * (sg * (canal + 2.5)) + up * (top - 1.0)
-                                + d * (fb * L * 0.46), 2.6))
+    # ── 椎体 ───────────────────────────────────────────────
+    # 端が平らな円柱（楕円断面）。角を丸めた箱だと短い椎体が «まんじゅう» になった。
+    # 長い楕円体を椎体の長さの板で切り、0.8 だけ太らせて縁を丸める。
+    body = ops.Offset(ops.Intersection([
+        Ellipsoid((w * 0.5 - 0.8, h * 0.5 - 0.8, L * 1.1), xform=(R, c)),
+        Box((w, h, L * 0.5 - 0.8), xform=(R, c)),
+    ]), 0.8)
+    parts.append(body)
+    if reg == "C" and n >= 3:
+        # 腹側稜（後ろへ向かって高くなる）
+        parts.append(RoundCone(c - up * (h * 0.40) - d * (L * 0.30),
+                               c - up * (h * 0.62) + d * (L * 0.30), 2.0, 2.8))
 
-    # 棘突起
+    # ── 椎弓: ブロックから椎孔をくり抜く ─────────────────────────
+    canal_c = c + up * (h * 0.5 + rc * 0.75)
+    arch_len = L * (0.36 if reg == "C" else 0.33)
+    # 椎弓: 丸い輪（楕円柱をくり抜く）。箱だと四角い窓枠に見えた。
+    arch = ops.Difference([
+        ops.Offset(ops.Intersection([
+            Ellipsoid((rc + 2.0, rc + 2.2, L * 2.0), xform=(R, canal_c + up * 0.8)),
+            Box((rc + 4.0, rc + 4.0, arch_len - 0.8), xform=(R, canal_c)),
+        ]), 0.8),
+        Chain([canal_c - d * L, canal_c + d * L], [rc, rc]),
+    ])
+    parts.append(arch)
+    top = h * 0.5 + rc * 0.75 + rc + 3.4               # 椎弓の上面（中心からの高さ）
+
+    # ── 関節突起（前: 上向きの関節面、後: 下向き） ──────────────────
+    ap_lat = rc + (3.6 if reg == "C" else 2.0)
+    ap_r = (3.6, 2.6, 4.2) if reg == "C" else (2.4, 2.0, 3.0)
+    for sg in (1, -1):
+        parts.append(Ellipsoid(ap_r, xform=(R, c + left * (sg * ap_lat) + up * (top - 2.0)
+                                            - d * (L * 0.46))))
+        parts.append(Ellipsoid(ap_r, xform=(R, c + left * (sg * (ap_lat - 1.0)) + up * (top - 1.0)
+                                            + d * (L * 0.46))))
+        if reg == "L":
+            # 乳頭突起（前関節突起の上の小さなこぶ）
+            parts.append(Sphere(c + left * (sg * ap_lat) + up * (top + 1.0) - d * (L * 0.42), 1.6))
+
+    # ── 棘突起 ───────────────────────────────────────────────
+    base = c + up * (top - 1.5)
     if reg == "C" and n == 2:
-        # 軸椎: 前へ大きく張り出す板状の棘突起と、前へ出る歯突起
-        parts.append(plate([(0, -L * 0.5), (0, L * 0.45), (14, L * 0.42),
-                            (20, L * 0.15), (19, -L * 0.75), (12, -L * 0.85)],
-                           3.2, c + up * top, up, d, corner=2.0))
-        parts.append(RoundCone(c - d * (L * 0.45), c - d * (L * 0.5 + 10.0), 4.5, 3.4))
-    elif reg != "S":
+        # 軸椎: 前へ大きく張り出す稜状の棘突起（板の輪郭を前後に長く）
+        poly = [(0, -L * 0.55), (8, -L * 0.85), (15, -L * 0.75), (19, -L * 0.30),
+                (20, L * 0.15), (16, L * 0.40), (8, L * 0.48), (0, L * 0.45)]
+        parts.append(_tplate(poly, lambda x, y: 3.6 - 1.6 * np.clip(np.asarray(x) / 20.0, 0, 1),
+                             base, up, d))
+        parts.append(Chain([c - d * (L * 0.45), c - d * (L * 0.5 + 6.0), c - d * (L * 0.5 + 10.0)],
+                           [4.6, 3.8, 3.0]))                     # 歯突起
+    elif reg == "S":
+        poly = [(0, -L * 0.45), (7, -L * 0.40), (9, -L * 0.1), (8, L * 0.25), (0, L * 0.45)]
+        parts.append(_tplate(poly, lambda x, y: 3.0 - 1.0 * np.clip(np.asarray(x) / 9.0, 0, 1),
+                             base, up, d))
+    else:
         sh = SPINE_H[reg][n]
         if sh > 2:
-            lr = math.tan(math.radians(_spine_lean(reg, n)))
-            b0 = L * 0.55
-            b1 = L * (0.42 if reg == "T" else 0.55)
-            poly = [(0, -b0 * 0.5), (0, b0 * 0.5),
-                    (sh * 0.6, b0 * 0.45 + sh * 0.6 * lr),
-                    (sh, b1 * 0.5 + sh * lr), (sh, -b1 * 0.5 + sh * lr),
-                    (sh * 0.6, -b0 * 0.45 + sh * 0.6 * lr)]
-            parts.append(plate(poly, 2.8 if reg == "T" else 3.2, c + up * (top - 1.0),
-                               up, d, corner=1.2))
-    else:
-        # 仙骨: 低い正中仙骨稜（3つの棘が癒合）
-        parts.append(plate([(0, -L * 0.5), (0, L * 0.45), (8, L * 0.40),
-                            (9, -L * 0.42)], 3.0, c + up * (top - 1.0), up, d, corner=1.5))
+            lean = _spine_lean(reg, n)
+            if reg == "T":
+                poly, th = _taper_plate(sh, L * 0.66, max(5.5, L * 0.38), lean, 3.6, 2.0)
+            elif reg == "L":
+                poly, th = _taper_plate(sh, L * 0.70, L * 0.55, lean, 3.6, 2.4)
+            else:
+                poly, th = _taper_plate(sh + 2, L * 0.45, L * 0.30, lean, 3.0, 2.0)
+            parts.append(_tplate(poly, th, base, up, d))
 
-    # 横突起
+    # ── 横突起 ───────────────────────────────────────────────
     if reg == "C" and n >= 3:
         for sg in (1, -1):
-            a = c + left * (sg * w * 0.4) - up * (h * 0.15)
-            b = a + left * (sg * 8.0) - up * 4.0 - d * (L * 0.1)
-            parts.append(RoundCone(a, b, 3.0, 2.0))
+            a = c + left * (sg * w * 0.42) - up * (h * 0.05)
+            out = unit(left * sg * 0.75 - up * 0.65)
+            poly, th = _taper_plate(10.0 if n < 6 else 9.0, L * 0.80, L * 0.55, 0.0, 3.2, 2.0)
+            parts.append(_tplate(poly, th, a, out, d))
             if n == 6:   # 第6頸椎の腹側板
-                parts.append(plate([(0, -L * 0.45), (12, -L * 0.40), (12, L * 0.35),
-                                    (0, L * 0.4)], 2.4, a, unit(left * sg * 0.4 - up),
-                                   d, corner=1.5))
+                poly, th = _taper_plate(13.0, L * 0.85, L * 0.75, 0.0, 2.6, 1.6, n_arc=8)
+                parts.append(_tplate(poly, th, a, unit(left * sg * 0.3 - up), d))
     elif reg == "T":
         for sg in (1, -1):
-            a = c + left * (sg * (canal + 1.5)) + up * (top - 2.5)
-            parts.append(RoundCone(a, a + left * (sg * 8.0) + up * 1.0, 2.8, 2.6))
+            a = c + left * (sg * (rc + 1.0)) + up * (top - 3.0)
+            b = a + left * (sg * 7.5) + up * 1.5
+            parts.append(RoundCone(a, b, 2.8, 2.3))
+            parts.append(Sphere(b, 2.7))                         # 横突起の肋骨窩
     elif reg == "L":
         tl = [16, 20, 24, 27, 28, 27, 20][n - 1]
         for sg in (1, -1):
-            a = c + left * (sg * w * 0.42)
-            parts.append(plate([(0, -L * 0.30), (tl, -L * 0.45 - tl * 0.25),
-                                (tl * 1.02, -L * 0.20 - tl * 0.3), (0, L * 0.30)],
-                               2.6, a, unit(left * sg - up * 0.30), d, corner=1.5))
+            a = c + left * (sg * w * 0.30)
+            out = unit(left * sg - up * 0.22 - d * 0.35)        # 外・前・やや下へ
+            poly, th = _taper_plate(tl, L * 0.62, L * 0.45, -12.0, 2.8, 1.6, n_arc=6)
+            parts.append(_tplate(poly, th, a, out, d))
     elif reg == "S":
-        # 仙骨翼（腸骨と関節する）
         for sg in (1, -1):
-            a = c + left * (sg * w * 0.42) - d * (L * 0.18)
-            parts.append(plate([(0, -L * 0.42), (16, -L * 0.45), (17, L * 0.02),
-                                (0, L * 0.38)], 9.0, a, left * sg, d, corner=2.5))
-        # 尾側へ細くなる
-        parts.append(Box((w * 0.32, h * 0.42, L * 0.2), round_r=3.0,
+            a = c + left * (sg * w * 0.40) - d * (L * 0.18)
+            poly, th = _taper_plate(15.0, L * 0.85, L * 0.55, -10.0, 9.0, 5.0, n_arc=8)
+            parts.append(_tplate(poly, th, a, left * sg, d))     # 仙骨翼
+        parts.append(Box((w * 0.32, h * 0.40, L * 0.2), round_r=3.0,
                          xform=(R, c + d * (L * 0.45))))
-    return ops.Union(parts, name=key)
+    return ops.SmoothUnion(parts, k=2.2, name=key)
 
 
 _C_NOTE = {

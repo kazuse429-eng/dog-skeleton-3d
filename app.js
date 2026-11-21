@@ -102,6 +102,7 @@
   for (const e of bones) for (const m of e.meshes) box.expandByObject(m);
   const center = box.getCenter(new THREE.Vector3());
   root.position.set(-center.x, 0, -center.z);
+  scene.updateMatrixWorld(true);   // 親の移動を反映してから境界箱を測る（でないと選択時に中心がずれる）
   floor.position.x = center.x; floor.position.z = center.z;
   const sizeAll = box.getSize(new THREE.Vector3());
   const targetAll = new THREE.Vector3(0, sizeAll.y * 0.5, 0);
@@ -122,8 +123,8 @@
     node.items.push(e);
   }
   function allBonesOf(node) {
-    let out = node.bones.slice();
-    for (const k of node.kids.values()) out = out.concat(allBonesOf(k));
+    let out = [];
+    for (const it of node.items) out = out.concat(it.kids ? allBonesOf(it) : [it]);
     return out;
   }
   function countMeshes(list) { return list.reduce((a, e) => a + e.meshes.length, 0); }
