@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+gen/_*.log
+*.tmp
+_shots/
+gen/_parts/
+gen/_shard_*.log
