@@ -101,6 +101,7 @@ def make_one(b):
     V, T = decimate(P, Q, target)
     o, q, vs, ts = pack(V, T)
     rec = dict(id=b["id"], ja=b["ja"], la=b["la"], path=b["path"],
+               layer=b["layer"], color=b["color"], alpha=b["alpha"],
                paired=b["paired"], note=b["note"], o=o, q=q, v=vs, i=ts)
     with open(os.path.join(PARTS, b["id"] + ".json"), "w", encoding="utf-8") as fp:
         json.dump(rec, fp, ensure_ascii=False)
@@ -119,7 +120,8 @@ def merge(bones):
         with open(fn, encoding="utf-8") as fp:
             rec = json.load(fp)
         # 名前・説明は定義から取り直す（メッシュを作り直さずに文言だけ直せる）
-        rec.update(ja=b["ja"], la=b["la"], path=b["path"], paired=b["paired"], note=b["note"])
+        rec.update(ja=b["ja"], la=b["la"], path=b["path"], paired=b["paired"], note=b["note"],
+                   layer=b["layer"], color=b["color"], alpha=b["alpha"])
         total += len(base64.b64decode(rec["i"])) // 6
         out.append(rec)
     out_path = os.path.join(HERE, "..", "bones_data.js")

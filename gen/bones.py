@@ -95,9 +95,11 @@ def smooth_chain(ctrl, radii, n=8, name=""):
 BONES = []
 
 
-def bone(ident, ja, la, path, field, paired=False, voxel=0.45, note=""):
+def bone(ident, ja, la, path, field, paired=False, voxel=0.45, note="", layer="bone", color=None,
+         alpha=1.0):
     BONES.append(dict(id=ident, ja=ja, la=la, path=list(path), field=field,
-                      paired=bool(paired), voxel=float(voxel), note=note))
+                      paired=bool(paired), voxel=float(voxel), note=note,
+                      layer=layer, color=color, alpha=float(alpha)))
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1019,4 +1021,6 @@ def build_all():
     build_forelimb()
     build_hindlimb()
     build_other()
+    import organs                      # 臓器（骨格の位置を使うので後から組む）
+    organs.build()
     return BONES

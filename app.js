@@ -83,7 +83,9 @@
   const pickables = [];
   for (const b of DATA.bones) {
     const isCart = b.id.startsWith('cc');
-    const entry = { data: b, meshes: [], baseColor: isCart ? COL_CART : COL_BONE };
+    const layer = b.layer || 'bone';
+    const base = b.color ? parseInt(b.color.slice(1), 16) : (isCart ? COL_CART : COL_BONE);
+    const entry = { data: b, meshes: [], baseColor: base, layer };
     const sides = b.paired ? [false, true] : [false];
     for (const mirror of sides) {
       const m = new THREE.Mesh(geometryFor(b, mirror), makeMat(entry.baseColor));
@@ -192,7 +194,7 @@
   function applySearch(q) {
     q = norm(q.trim());
     for (const [e, row] of rowsByBone) {
-      const hit = !q || norm(e.data.ja + ' ' + e.data.la + ' ' + e.data.path.join(' ')).includes(q);
+      const hit = onLayer(e) && (!q || norm(e.data.ja + ' ' + e.data.la + ' ' + e.data.path.join(' ')).includes(q));
       row.classList.toggle('hidden', !hit);
     }
     // 中身が全部隠れたグループは隠す（下から）
@@ -215,7 +217,9 @@
 
   // ── 選択と表示 ─────────────────────────────────────────────
   let mode = 'dim';
+  let layer = 'bone';            // 'bone' | 'organ' | 'both'
   let current = null;            // {kind, bone|list, label}
+  const onLayer = (e) => layer === 'both' || e.layer === layer;
   function selectedSet() {
     if (!current) return null;
     return new Set(current.kind === 'bone' ? [current.bone] : current.list);
@@ -224,13 +228,23 @@
     const sel = selectedSet();
     for (const e of bones) {
       const on = sel && sel.has(e);
+      const vis = onLayer(e);
+      // 「両方」では骨を半透明にして、中の臓器が見えるようにする
+      const ghostBone = layer === 'both' && e.layer === 'bone';
       for (const m of e.meshes) {
         const mat = m.material;
-        if (!sel) {
-          mat.color.setHex(e.baseColor); mat.emissive.setHex(0); mat.transparent = false; mat.opacity = 1;
-          mat.depthWrite = true; m.visible = true;
+        if (!vis && !on) {
+          m.visible = false;
+        } else if (!sel) {
+          const a = ghostBone ? 0.22 : (e.data.alpha || 1);
+          mat.color.setHex(e.baseColor); mat.emissive.setHex(0);
+          mat.transparent = a < 1; mat.opacity = a;
+          mat.depthWrite = a >= 1; m.visible = true;
         } else if (on) {
-          mat.color.setHex(COL_SEL); mat.emissive.setHex(0x3a1600); mat.transparent = false; mat.opacity = 1;
+          // 骨はオレンジ、臓器は自分の色のまま光らせる（色で臓器を見分けられるように）
+          mat.color.setHex(e.layer === 'organ' ? e.baseColor : COL_SEL);
+          mat.emissive.setHex(e.layer === 'organ' ? 0x4a2a00 : 0x3a1600);
+          mat.transparent = false; mat.opacity = 1;
           mat.depthWrite = true; m.visible = true;
         } else {
           mat.color.setHex(e.baseColor); mat.emissive.setHex(0);
@@ -262,7 +276,7 @@
       $('card-ja').textContent = d.ja;
       $('card-la').textContent = d.la;
       $('card-note').textContent = d.note || '';
-      $('card-count').textContent = d.paired ? '左右に1対' : '正中に1個';
+      $('card-count').textContent = d.paired ? '左右に1対' : (d.layer === 'organ' ? '' : '正中に1個');
     } else {
       const path = [];
       for (let n = s.node; n && n.name; n = n.parent) path.unshift(n.name);
@@ -308,6 +322,38 @@
     document.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
     applyLook(); setHash();
   }));
+  // ── 骨格／臓器の切り替え ─────────────────────────────────
+  function setLayer(ly, fly) {
+    layer = ly;
+    document.querySelectorAll('[data-layer]').forEach((x) => x.classList.toggle('on', x.dataset.layer === ly));
+    // 一覧: 今の層に無いグループは隠す（一番上の «臓器» グループと骨のグループ）
+    for (const g of groupEls) {
+      if (g._node.parent !== tree) continue;
+      const isOrgan = g._node.name === '臓器';
+      g.classList.toggle('off-layer', !(ly === 'both' || (ly === 'organ') === isOrgan));
+    }
+    if (current) {
+      const list = current.kind === 'bone' ? [current.bone] : current.list;
+      if (!list.some(onLayer)) select(null);
+    }
+    applyLook(); setHash();
+    if (fly) flyTo(boundsOf(bones.filter(onLayer)));
+  }
+  document.querySelectorAll('[data-layer]').forEach((b) => b.addEventListener('click', () => setLayer(b.dataset.layer, !current)));
+
+  // ── 一覧の開け閉め（状態は覚えておく） ─────────────────────────
+  function setSide(open) {
+    document.body.classList.toggle('side-closed', !open);
+    $('btn-side').classList.toggle('on', open);
+    try { localStorage.setItem('dogSkeleton.side', open ? '1' : '0'); } catch (e) { /* 保存できない環境 */ }
+  }
+  $('btn-side').onclick = () => setSide(document.body.classList.contains('side-closed'));
+  {
+    let saved = null;
+    try { saved = localStorage.getItem('dogSkeleton.side'); } catch (e) { /* 無視 */ }
+    setSide(saved === null ? window.innerWidth > 760 : saved === '1');
+  }
+
   $('btn-all').onclick = () => { select(null); flyTo(boundsOf(bones), VIEWS.persp.clone().normalize()); };
   $('card-close').onclick = () => select(null);
   $('spin').addEventListener('change', (ev) => { controls.autoRotate = ev.target.checked; });
@@ -319,7 +365,7 @@
     const r = canvas.getBoundingClientRect();
     mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(mouse, camera);
-    const hits = ray.intersectObjects(pickables.filter((m) => m.visible && (!m.material.transparent)), false);
+    const hits = ray.intersectObjects(pickables.filter((m) => m.visible && (!m.material.transparent || (!current && m.material.opacity > 0.3))), false);
     return hits.length ? hits[0].object : null;
   }
   const hover = $('hover');
@@ -356,12 +402,15 @@
     const p = new URLSearchParams();
     if (current) p.set('sel', current.kind === 'bone' ? current.bone.data.id : 'g:' + current.label);
     if (mode !== 'dim') p.set('mode', mode);
+    if (layer !== 'bone') p.set('layer', layer);
     const h = p.toString();
     history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
   }
   function fromHash() {
     const p = new URLSearchParams(location.hash.slice(1));
     hashLock = true;
+    const ly = p.get('layer');
+    if (ly) setLayer(ly, false);
     const m = p.get('mode');
     if (m) document.querySelector('[data-mode="' + m + '"]')?.click();
     const s = p.get('sel');

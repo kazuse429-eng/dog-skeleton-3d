@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>犬の骨格 3D — 骨の名前から選べるビューア</title>
+<title>犬の骨格・臓器 3D — 名前から選べるビューア</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
   <aside id="side">
     <header>
-      <h1>犬の骨格 3D</h1>
+      <h1>犬の骨格・臓器 3D</h1>
       <p class="sub">中型犬・体高 約38cm</p>
     </header>
     <div class="search">
-      <input id="q" type="search" placeholder="骨の名前で探す（例: 上腕骨, femur, 胸椎）" autocomplete="off">
+      <input id="q" type="search" placeholder="名前で探す（例: 上腕骨, femur, 心臓）" autocomplete="off">
     </div>
     <div class="tools">
       <button id="btn-all" title="選択を解除して全体を表示">全体表示</button>
@@ -27,6 +27,12 @@
     <canvas id="view"></canvas>
     <div id="hover" hidden></div>
     <div id="toolbar">
+      <button id="btn-side" class="side-btn" title="骨の名前の一覧を開く／閉じる">☰ 一覧</button>
+      <div class="seg" role="group" aria-label="表示するもの">
+        <button data-layer="bone" class="on">骨格</button>
+        <button data-layer="organ">臓器</button>
+        <button data-layer="both">両方</button>
+      </div>
       <div class="seg" role="group" aria-label="選んでいない骨の表示">
         <button data-mode="dim" class="on">周りを薄く</button>
         <button data-mode="only">選んだ骨だけ</button>

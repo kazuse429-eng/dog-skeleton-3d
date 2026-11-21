@@ -40,7 +40,10 @@ button:hover { background: #2f3641; }
 .row .n { color: var(--muted); font-size: 11px; font-weight: normal; }
 .kids { padding-left: 14px; display: none; }
 .grp.open > .kids { display: block; }
-.hidden { display: none !important; }
+.hidden, .off-layer { display: none !important; }
+.side-closed #side { display: none; }
+.side-btn.on { background: #2f3641; }
+.side-btn { background: rgba(27, 31, 38, .88); }
 mark { background: none; color: var(--accent); }
 
 #stage { position: relative; flex: 1; overflow: hidden; }
@@ -76,6 +79,7 @@ mark { background: none; color: var(--accent); }
   #app { flex-direction: column-reverse; }
   #side { width: 100%; height: 42vh; border-right: none; border-top: 1px solid var(--line); }
   #stage { height: 58vh; flex: none; }
+  .side-closed #stage { height: 100vh; }
   #help { display: none; }
   /* スマホでは説明カードを下端の細い帯にして、3D を隠さない */
   #card { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 8px 34px 8px 12px; }
