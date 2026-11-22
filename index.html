@@ -25,7 +25,9 @@
   </aside>
   <main id="stage">
     <canvas id="view"></canvas>
+    <div id="labels"></div>
     <div id="hover" hidden></div>
+    <section id="quiz" hidden></section>
     <div id="toolbar">
       <button id="btn-side" class="side-btn" title="骨の名前の一覧を開く／閉じる">☰ 一覧</button>
       <div class="seg" role="group" aria-label="表示するもの">
@@ -45,6 +47,8 @@
         <button data-view="persp">斜め</button>
       </div>
       <label class="chk"><input type="checkbox" id="spin"> 自動回転</label>
+      <button id="btn-labels" class="side-btn" title="3D の上に名前を表示">🏷 名前</button>
+      <button id="btn-quiz" class="quiz-btn" title="クイズで覚える">🎯 クイズ</button>
     </div>
     <section id="card" hidden>
       <button id="card-close" aria-label="閉じる">×</button>
@@ -61,5 +65,6 @@
 <script src="vendor/three_bundle.js"></script>
 <script src="bones_data.js"></script>
 <script src="app.js"></script>
+<script src="quiz.js"></script>
 </body>
 </html>

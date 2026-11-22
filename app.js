@@ -233,6 +233,11 @@
       const ghostBone = layer === 'both' && e.layer === 'bone';
       for (const m of e.meshes) {
         const mat = m.material;
+        if (e.flash) {                  // クイズの正誤の色を一時的に重ねる
+          m.visible = true; mat.color.setHex(e.flash); mat.emissive.setHex(0x202020);
+          mat.transparent = false; mat.opacity = 1; mat.depthWrite = true; m.renderOrder = 2;
+          mat.needsUpdate = true; continue;
+        }
         if (!vis && !on) {
           m.visible = false;
         } else if (!sel) {
@@ -264,12 +269,17 @@
     return b;
   }
 
-  function select(s, fly) {
+  function select(s, fly, opts) {
     current = s;
     applyLook();
     const card = $('card');
     if (!s) { card.hidden = true; setRowSel(null); setHash(); return; }
     const list = s.kind === 'bone' ? [s.bone] : s.list;
+    if (opts && opts.silent) {        // クイズ中: 名前の出るカードは出さない
+      card.hidden = true;
+      if (fly) flyTo(boundsOf(list), opts.dir, opts.minR);
+      return;
+    }
     if (s.kind === 'bone') {
       const d = s.bone.data;
       $('card-path').textContent = d.path.join(' › ');
@@ -294,9 +304,9 @@
 
   // ── カメラ ───────────────────────────────────────────────
   let anim = null;
-  function flyTo(b, dirOverride) {
+  function flyTo(b, dirOverride, minR) {
     const sphere = b.getBoundingSphere(new THREE.Sphere());
-    const r = Math.max(sphere.radius, 18);
+    const r = Math.max(sphere.radius, minR || 18);
     const fov = camera.fov * Math.PI / 180;
     const dist = r / Math.sin(fov / 2) * 1.6;
     const dir = dirOverride || camera.position.clone().sub(controls.target).normalize();
@@ -366,13 +376,17 @@
     mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(mouse, camera);
     const hits = ray.intersectObjects(pickables.filter((m) => m.visible && (!m.material.transparent || (!current && m.material.opacity > 0.3))), false);
-    return hits.length ? hits[0].object : null;
+    if (!hits.length) return null;
+    // 半透明（肺など）の奥に不透明なものがあれば、そちらを選ぶ（肺越しに心臓を押せるように）
+    const solid = hits.find((h) => !h.object.material.transparent);
+    return (solid || hits[0]).object;
   }
   const hover = $('hover');
   canvas.addEventListener('pointermove', (ev) => {
     if (ev.buttons) { hover.hidden = true; return; }
     const m = pick(ev);
     if (!m) { hover.hidden = true; canvas.style.cursor = ''; return; }
+    if (window.DogQuiz && window.DogQuiz.active) { hover.hidden = true; canvas.style.cursor = 'pointer'; return; }
     const d = m.userData.bone.data;
     hover.textContent = d.ja + (m.userData.side ? '（' + m.userData.side + '）' : '');
     const r = canvas.getBoundingClientRect();
@@ -387,6 +401,7 @@
   canvas.addEventListener('pointerup', (ev) => {
     if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return;
     const m = pick(ev);
+    if (window.DogQuiz && window.DogQuiz.active) { window.DogQuiz.onPick(m); return; }
     if (!m) { if (current) select(null); return; }
     const e = m.userData.bone;
     select({ kind: 'bone', bone: e }, false);
@@ -430,6 +445,73 @@
     setHash();
   }
 
+  // ── 名前ラベル（3D の上に浮かべる） ───────────────────────────
+  // 選んでいるものがあればそれに、無ければ «表示中の大きめの骨・臓器» に付ける。
+  let labelsOn = false;
+  const labelBox = $('labels');
+  const labelEls = new Map();      // entry -> div
+  const tmpV = new THREE.Vector3();
+  // ラベルの対象: {key, text, meshes}。meshes の中心（左右はカメラに近いほう）に付ける。
+  function labelTargets() {
+    if (window.DogQuiz && window.DogQuiz.active) return [];
+    const one = (e) => ({ key: e, text: e.data.ja, sets: [e.meshes] });
+    if (current) return (current.kind === 'bone' ? [current.bone] : current.list).filter(onLayer).slice(0, 80).map(one);
+    // 何も選んでいないとき: 4個以上並ぶグループ（胸椎・肋骨など）はグループ名ひとつにまとめる
+    const out = [];
+    const walk = (node) => {
+      for (const it of node.items) {
+        if (it.kids) {
+          const list = allBonesOf(it).filter(onLayer);
+          const leaf = it.items.every((x) => !x.kids);
+          if (leaf && list.length >= 4 && it.name !== '臓器') {
+            out.push({ key: it, text: it.name, sets: [list.map((e) => e.meshes[0]), list.map((e) => e.meshes[e.meshes.length - 1])] });
+          } else walk(it);
+        } else if (onLayer(it) && it.radius >= (it.layer === 'organ' ? 4 : 12)) out.push(one(it));
+      }
+    };
+    walk(tree);
+    return out;
+  }
+  function setLabels(on) {
+    labelsOn = on;
+    $('btn-labels').classList.toggle('on', on);
+    if (!on) { labelBox.innerHTML = ''; labelEls.clear(); }
+  }
+  $('btn-labels').onclick = () => setLabels(!labelsOn);
+  for (const e of bones) {
+    e.radius = e.meshes[0].geometry.boundingSphere.radius;
+  }
+  function updateLabels() {
+    if (!labelsOn) return;
+    const targets = labelTargets();
+    const want = new Set(targets.map((t) => t.key));
+    for (const [k, d] of labelEls) if (!want.has(k)) { d.remove(); labelEls.delete(k); }
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    for (const t of targets) {
+      let d = labelEls.get(t.key);
+      if (!d) {
+        d = document.createElement('div');
+        d.className = 'lbl' + (t.key.kids ? ' grp' : '');
+        d.textContent = t.text;
+        labelBox.appendChild(d);
+        labelEls.set(t.key, d);
+      }
+      // 左右のある骨は、カメラに近いほうに付ける
+      let best = null, bd = Infinity;
+      for (const ms of t.sets) {
+        const c = new THREE.Vector3();
+        for (const m of ms) c.add(tmpV.copy(m.geometry.boundingSphere.center).applyMatrix4(m.matrixWorld));
+        c.multiplyScalar(1 / ms.length);
+        const dd = c.distanceTo(camera.position);
+        if (dd < bd) { bd = dd; best = c; }
+      }
+      best.project(camera);
+      const vis = best.z < 1 && Math.abs(best.x) < 1.05 && Math.abs(best.y) < 1.05;
+      d.style.display = vis ? '' : 'none';
+      if (vis) d.style.transform = 'translate(' + ((best.x + 1) / 2 * w).toFixed(1) + 'px,' + ((1 - best.y) / 2 * h).toFixed(1) + 'px)';
+    }
+  }
+
   // ── 描画ループ ─────────────────────────────────────────────
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -450,6 +532,7 @@
     }
     controls.update();
     renderer.render(scene, camera);
+    updateLabels();
     requestAnimationFrame(loop);
   }
 
@@ -459,7 +542,18 @@
   controls.target.copy(all.center);
   camera.position.copy(all.center).add(d0.multiplyScalar(all.radius / Math.sin(camera.fov * Math.PI / 360) * 0.72));
   $('loading').remove();
+  setLayer(layer, false);          // 最初の表示にも層を反映（しないと骨格モードで臓器が見え、一覧にも臓器が出る）
   fromHash();
   loop();
-  window.__dog = { select, viewAll, byId, bones };
+  function flash(list, hex) {
+    for (const e of bones) e.flash = 0;
+    for (const e of list) e.flash = hex;
+    applyLook();
+  }
+  window.__dog = {
+    select, viewAll, byId, bones, tree, rowsByBone, flyTo, boundsOf, applyLook, flash, setSide,
+    setLayer, getLayer: () => layer, setMode: (m) => document.querySelector('[data-mode="' + m + '"]').click(),
+    getMode: () => mode, VIEWS, setLabels: (on) => setLabels(on),
+  };
+  document.dispatchEvent(new Event('dog-ready'));
 })();
