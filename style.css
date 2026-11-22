@@ -166,3 +166,19 @@ mark { background: none; color: var(--accent); }
   #toolbar .seg:nth-of-type(3) { display: none; }   /* スマホでは «周りを薄く…» を省く */
 }
 .lbl.grp { background: rgba(255, 154, 77, .85); color: #1a1a1a; font-weight: bold; border-left: none; }
+
+/* ── 出どころ・出典 ───────────────────────── */
+.tag { font-size: 10px; padding: 0 4px; border-radius: 3px; flex: none; font-weight: bold; }
+.tag-scan { background: #2f6f4f; color: #d8ffe8; }
+.tag-derived { background: #4a5a7a; color: #dde6ff; }
+.src { font-size: 12px; margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: #20262f; line-height: 1.5; }
+.src small { color: var(--muted); display: block; }
+.src-scan { border-left: 3px solid #3cc46a; }
+.src-derived { border-left: 3px solid #7d93c9; }
+.src-model { border-left: 3px solid #8d96a3; color: var(--muted); }
+.linkbtn { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: 12px; }
+#credits { position: absolute; top: 56px; left: 14px; right: 14px; max-width: 640px; max-height: calc(100% - 80px); overflow-y: auto;
+  background: rgba(24, 28, 35, .97); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 13px; z-index: 5; }
+#credits .cr { margin: 10px 0; line-height: 1.6; }
+#credits a { color: #8fb8ff; word-break: break-all; }
+.cr-sum, .cr-note { color: var(--muted); }

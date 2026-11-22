@@ -11,7 +11,7 @@
   <aside id="side">
     <header>
       <h1>犬の骨格・臓器 3D</h1>
-      <p class="sub">中型犬・体高 約38cm</p>
+      <p class="sub">中型犬・体高 約46cm ／ <button id="btn-credits" class="linkbtn">出典</button></p>
     </header>
     <div class="search">
       <input id="q" type="search" placeholder="名前で探す（例: 上腕骨, femur, 心臓）" autocomplete="off">
@@ -28,6 +28,7 @@
     <div id="labels"></div>
     <div id="hover" hidden></div>
     <section id="quiz" hidden></section>
+    <section id="credits" hidden></section>
     <div id="toolbar">
       <button id="btn-side" class="side-btn" title="骨の名前の一覧を開く／閉じる">☰ 一覧</button>
       <div class="seg" role="group" aria-label="表示するもの">
@@ -56,6 +57,7 @@
       <h2 id="card-ja"></h2>
       <div id="card-la"></div>
       <p id="card-note"></p>
+      <div id="card-src" class="src" hidden></div>
       <div id="card-count"></div>
     </section>
     <div id="help">ドラッグ: 回転 ／ 右ドラッグ: 移動 ／ ホイール: 拡大 ／ 骨をクリック: 選択</div>

@@ -7,6 +7,8 @@
   const DATA = window.DOG_BONES;
   const $ = (id) => document.getElementById(id);
 
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
   // ── three.js の土台 ─────────────────────────────────────────
   const canvas = $('view');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -168,6 +170,11 @@
       const row = el('div', 'row bone');
       row.appendChild(el('span', 'tw', ''));
       row.appendChild(el('span', 'nm', e.data.ja));
+      if (e.data.src === 'scan' || e.data.src === 'derived') {
+        const t = el('span', 'tag tag-' + e.data.src, e.data.src === 'scan' ? '実' : '流');
+        t.title = e.data.src === 'scan' ? '実物スキャン' : '実物の形を流用';
+        row.appendChild(t);
+      }
       row.appendChild(el('span', 'la', e.data.la));
       row.title = e.data.ja + ' / ' + e.data.la;
       parentEl.appendChild(row);
@@ -287,6 +294,11 @@
       $('card-la').textContent = d.la;
       $('card-note').textContent = d.note || '';
       $('card-count').textContent = d.paired ? '左右に1対' : (d.layer === 'organ' ? '' : '正中に1個');
+      $('card-src').className = 'src src-' + (d.src || 'model');
+      $('card-src').innerHTML = d.src === 'scan' ? '🔬 実物スキャン <small>' + esc(d.credit || '') + '</small>'
+        : d.src === 'derived' ? '🧩 実物の形を流用（' + esc(d.derived_from || '') + 'のスキャンを変形） <small>' + esc(d.credit || '') + '</small>'
+        : '✏️ 模式（形は目安。実物データなし）';
+      $('card-src').hidden = false;
     } else {
       const path = [];
       for (let n = s.node; n && n.name; n = n.parent) path.unshift(n.name);
@@ -296,6 +308,7 @@
       const names = s.list.map((e) => e.data.ja);
       $('card-note').textContent = names.length > 14 ? names.slice(0, 14).join('・') + ' …' : names.join('・');
       $('card-count').textContent = '骨 ' + countMeshes(s.list) + ' 個';
+      $('card-src').hidden = true;
     }
     card.hidden = false;
     if (fly) flyTo(boundsOf(list));
@@ -363,6 +376,19 @@
     try { saved = localStorage.getItem('dogSkeleton.side'); } catch (e) { /* 無視 */ }
     setSide(saved === null ? window.innerWidth > 760 : saved === '1');
   }
+
+  // ── 出典 ───────────────────────────────────────────────
+  $('btn-credits').onclick = () => {
+    const box = $('credits');
+    const n = (k) => DATA.bones.filter((b) => (b.src || 'model') === k).length;
+    box.innerHTML = '<div class="qz-head"><b>出典とデータの出どころ</b><button class="qz-x" id="cr-x" aria-label="閉じる">×</button></div>' +
+      '<p class="cr-sum">🔬 実物スキャン ' + n('scan') + ' ／ 🧩 実物の形を流用 ' + n('derived') + ' ／ ✏️ 模式 ' + n('model') + '（一覧の «実» «流» の印）</p>' +
+      (DATA.credits || []).map((c) => '<div class="cr"><b>' + esc(c.what) + '</b><br>' + esc(c.who) + '（' + esc(c.license) + '）<br>' +
+        '<a href="' + esc(c.url) + '" target="_blank" rel="noopener">' + esc(c.url) + '</a><br><small>改変: ' + esc(c.mod) + '</small></div>').join('') +
+      '<p class="cr-note">位置合わせ・形の流用・模式の骨と臓器はこのサイトで作ったものです。実物データも、骨ごとの切り分けや体内への配置は目安を含みます。</p>';
+    box.hidden = false;
+    $('cr-x').onclick = () => { box.hidden = true; };
+  };
 
   $('btn-all').onclick = () => { select(null); flyTo(boundsOf(bones), VIEWS.persp.clone().normalize()); };
   $('card-close').onclick = () => select(null);
@@ -542,7 +568,9 @@
   controls.target.copy(all.center);
   camera.position.copy(all.center).add(d0.multiplyScalar(all.radius / Math.sin(camera.fov * Math.PI / 360) * 0.72));
   $('loading').remove();
-  setLayer(layer, false);          // 最初の表示にも層を反映（しないと骨格モードで臓器が見え、一覧にも臓器が出る）
+  // 最初の表示にも層を反映（しないと骨格モードで臓器が見え、一覧にも臓器が出る）。
+  // このとき URL の # を書き換えないこと（先に消すと #sel=… の共有が効かなくなる）。
+  hashLock = true; setLayer(layer, false); hashLock = false;
   fromHash();
   loop();
   function flash(list, hex) {

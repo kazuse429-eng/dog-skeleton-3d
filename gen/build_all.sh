@@ -10,3 +10,4 @@ while [ $i -lt $N ]; do
 done
 wait
 "$BL" --background --python gen/build.py -- --merge 2>&1 | grep "骨 "
+PYTHONIOENCODING=utf-8 python gen/realfit.py | head -3   # 実物スキャンに合わせて組み直す（最終の bones_data.js）
