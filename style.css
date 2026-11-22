@@ -75,22 +75,48 @@ mark { background: none; color: var(--accent); }
 #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--muted); background: var(--bg); }
 
+/* デスクトップ: «⋯» の中身はそのまま並べる */
+#btn-more { display: none; }
+#more { display: contents; }
+
+/* ── スマホ: 3D を全画面に、一覧は下から引き出すシート、ボタンは1段 ── */
 @media (max-width: 760px) {
-  #app { flex-direction: column-reverse; }
-  #side { width: 100%; height: 42vh; border-right: none; border-top: 1px solid var(--line); }
-  #stage { height: 58vh; flex: none; }
-  .side-closed #stage { height: 100vh; }
+  html, body { overflow: hidden; overscroll-behavior: none; }
+  #app { display: block; }
+  #stage { position: fixed; inset: 0; }
+  #side { position: fixed; left: 0; right: 0; bottom: 0; width: auto; height: 64vh; z-index: 20;
+    border-right: none; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, .5); transition: transform .25s ease;
+    padding-bottom: env(safe-area-inset-bottom); }
+  #side::before { content: ""; display: block; width: 44px; height: 5px; border-radius: 3px;
+    background: #3a414d; margin: 8px auto 0; }
+  .side-closed #side { display: flex; transform: translateY(105%); }
+  #side header { padding: 6px 16px 2px; }
+  #side h1 { font-size: 16px; }
   #help { display: none; }
-  /* スマホでは説明カードを下端の細い帯にして、3D を隠さない */
-  #card { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 8px 34px 8px 12px; }
+  /* 説明カードは下端の細い帯に */
+  #card { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; padding: 8px 34px 8px 12px; }
   #card h2 { font-size: 17px; display: inline; margin-right: 8px; }
   #card-la { display: inline; font-size: 12px; }
   #card-path, #card-count { display: none; }
   #card-note { font-size: 12px; line-height: 1.5; margin-top: 4px;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  #toolbar { top: 6px; left: 6px; right: 6px; gap: 6px; }
-  .seg button, .chk { font-size: 11px; padding: 4px 7px; }
-  .row { padding: 7px 8px; }      /* 指で押しやすく */
+  #card .src { font-size: 11px; margin-top: 4px; padding: 3px 6px; }
+  #card .src small { display: none; }
+  /* ボタンは1段。文字は省いてアイコンだけ */
+  #toolbar { top: calc(6px + env(safe-area-inset-top)); left: 6px; right: 6px; gap: 6px; flex-wrap: nowrap; }
+  #toolbar button { min-height: 40px; min-width: 40px; font-size: 14px; }
+  #toolbar .seg button { padding: 4px 10px; }
+  .lbl-t { display: none; }
+  #btn-more { display: inline-block; margin-left: auto; font-size: 18px; }
+  #more { display: none; }
+  .more-open #more { display: flex; flex-direction: column; gap: 8px; position: absolute; top: 48px; right: 0;
+    background: rgba(24, 28, 35, .97); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .more-open #more .seg button { flex: 1; }
+  .chk { font-size: 14px; padding: 8px 10px; }
+  .row { padding: 9px 8px; }      /* 指で押しやすく */
+  .tools button { min-height: 36px; }
+  #q { font-size: 16px; }         /* 16px 未満だと iPhone が入力時に拡大する */
 }
 
 /* ── 名前ラベル ───────────────────────────── */
@@ -160,10 +186,10 @@ mark { background: none; color: var(--accent); }
 .qz-wlist button { margin: 4px 4px 0 0; font-size: 13px; }
 
 @media (max-width: 760px) {
-  #quiz { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 55%; padding: 10px 12px; }
+  #quiz { top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); left: 8px; right: 8px; width: auto; max-height: 55%; padding: 10px 12px; }
+  .qz-ch button { min-height: 48px; }
   .qz-q { font-size: 15px; }
   .qz-ch button { min-height: 42px; font-size: 13px; padding: 8px; }
-  #toolbar .seg:nth-of-type(3) { display: none; }   /* スマホでは «周りを薄く…» を省く */
 }
 .lbl.grp { background: rgba(255, 154, 77, .85); color: #1a1a1a; font-weight: bold; border-left: none; }
 

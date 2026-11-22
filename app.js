@@ -320,10 +320,15 @@
   function flyTo(b, dirOverride, minR) {
     const sphere = b.getBoundingSphere(new THREE.Sphere());
     const r = Math.max(sphere.radius, minR || 18);
-    const fov = camera.fov * Math.PI / 180;
-    const dist = r / Math.sin(fov / 2) * 1.6;
+    const dist = r / Math.sin(fitFov() / 2) * 1.6;
     const dir = dirOverride || camera.position.clone().sub(controls.target).normalize();
     animateCam(sphere.center.clone(), sphere.center.clone().add(dir.multiplyScalar(dist)));
+  }
+  // 縦長の画面（スマホ）では横の画角のほうが狭いので、狭いほうで距離を決める
+  function fitFov() {
+    const v = camera.fov * Math.PI / 180;
+    const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    return Math.min(v, 2 * Math.atan(Math.tan(v / 2) * aspect));
   }
   function animateCam(tgt, pos) {
     anim = { t: 0, from: [controls.target.clone(), camera.position.clone()], to: [tgt, pos] };
@@ -357,7 +362,7 @@
     }
     if (current) {
       const list = current.kind === 'bone' ? [current.bone] : current.list;
-      if (!list.some(onLayer)) select(null);
+      if (!list.some(onLayer)) { select(null); fly = true; }   // 選択が外れたら全体へ引く
     }
     applyLook(); setHash();
     if (fly) flyTo(boundsOf(bones.filter(onLayer)));
@@ -389,6 +394,17 @@
     box.hidden = false;
     $('cr-x').onclick = () => { box.hidden = true; };
   };
+
+  // ── スマホの «⋯»（表示の設定） ───────────────────────────────
+  $('btn-more').onclick = (ev) => { ev.stopPropagation(); document.body.classList.toggle('more-open'); };
+  document.addEventListener('pointerdown', (ev) => {
+    if (document.body.classList.contains('more-open') && !ev.target.closest('#more, #btn-more')) document.body.classList.remove('more-open');
+  });
+  // スマホ: 一覧で選んだら、3D が見えるようにシートを閉じる
+  const isPhone = () => window.matchMedia('(max-width: 760px)').matches;
+  $('tree').addEventListener('click', (ev) => {
+    if (isPhone() && ev.target.closest('.row.bone')) setTimeout(() => setSide(false), 150);
+  });
 
   $('btn-all').onclick = () => { select(null); flyTo(boundsOf(bones), VIEWS.persp.clone().normalize()); };
   $('card-close').onclick = () => select(null);
@@ -566,7 +582,8 @@
   const d0 = VIEWS.persp.clone().normalize();
   const all = boundsOf(bones).getBoundingSphere(new THREE.Sphere());
   controls.target.copy(all.center);
-  camera.position.copy(all.center).add(d0.multiplyScalar(all.radius / Math.sin(camera.fov * Math.PI / 360) * 0.72));
+  resize();
+  camera.position.copy(all.center).add(d0.multiplyScalar(all.radius / Math.sin(fitFov() / 2) * 0.72));
   $('loading').remove();
   // 最初の表示にも層を反映（しないと骨格モードで臓器が見え、一覧にも臓器が出る）。
   // このとき URL の # を書き換えないこと（先に消すと #sel=… の共有が効かなくなる）。
@@ -584,4 +601,6 @@
     getMode: () => mode, VIEWS, setLabels: (on) => setLabels(on),
   };
   document.dispatchEvent(new Event('dog-ready'));
+  // ホーム画面に追加したとき、オフラインでも開けるように（https のときだけ）
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

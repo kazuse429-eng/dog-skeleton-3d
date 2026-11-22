@@ -284,6 +284,69 @@ def fit_organ(Vs, Vt, iters=25):
     return Vs @ R.T * s + t, err
 
 
+# ─── 脳（コーネル大学 MRI アトラス、CC0） ─────────────────────────────────
+
+CREDIT_BRAIN = dict(src="scan", credit="Johnson & Barry (2019) Cortical Atlas of the Canine Brain, Cornell University (MRI), CC0",
+                    url="https://doi.org/10.7298/4t8z-aw34")
+
+BRAIN = [  # id, 和名, ラテン名, 色, 左右, 説明
+    ("brain_frontal", "前頭葉", "Lobus frontalis", "#e9a3a8", True,
+     "大脳の前部。十字溝より前で、行動の計画などに関わる。"),
+    ("brain_sensorimotor", "感覚運動野（十字溝周囲）", "Cortex sensorimotorius", "#e7b77c", True,
+     "十字溝のまわりの皮質。一次運動野と体性感覚野がある（犬の運動野は前方の十字溝周囲）。"),
+    ("brain_parietal", "頭頂葉", "Lobus parietalis", "#d9c36e", True,
+     "大脳の背側中央。感覚情報の統合。"),
+    ("brain_temporal", "側頭葉（外シルビウス溝周囲）", "Lobus temporalis", "#9fc98a", True,
+     "大脳の外側、外シルビウス溝のまわり。聴覚野がある。"),
+    ("brain_occipital", "後頭葉", "Lobus occipitalis", "#8fb5df", True,
+     "大脳の後部。視覚野（外側回・後外側回の領域）がある。"),
+    ("brain_cingulate", "帯状回", "Gyrus cinguli", "#c39bd6", True,
+     "大脳半球の内側面、脳梁の上。辺縁系の一部（情動・記憶）。"),
+    ("brain_olfactory", "嗅球", "Bulbus olfactorius", "#f0c48a", True,
+     "大脳の前端。犬は嗅覚が発達していて嗅球が大きい。"),
+    ("brain_white", "大脳髄質（白質）", "Substantia alba", "#ece4d6", True,
+     "皮質の内側の白質。表面の脳葉のすき間から見える部分（深部の核は含めて表示）。"),
+    ("brain_cerebellum", "小脳", "Cerebellum", "#d4949c", False,
+     "大脳の後ろ、脳幹の背側。中央の虫部と左右の半球。運動の協調・平衡。"),
+    ("brain_stem", "脳幹", "Truncus encephali", "#c98b8b", False,
+     "中脳・橋・延髄（この表示は間脳の一部を含む目安）。大後頭孔を通って脊髄へ続く。"),
+]
+
+
+def fit_brain(target):
+    """脳全体（左右）を、模型の脳（曲げ済み）に «前後の傾き・拡大・平行移動» だけで合わせる。
+
+    左右を崩さない（右半球はビューアで鏡像にする）ため、回転は左右軸まわりだけ。
+    """
+    from scipy.spatial import cKDTree
+    parts = {k: scan(k) for k, *_ in BRAIN}
+    allV = []
+    for k, ja, la, col, paired, note in BRAIN:
+        V, _ = parts[k]
+        allV.append(V)
+        if paired:
+            allV.append(V * [1, -1, 1])
+    A = np.concatenate(allV)
+    rng = np.random.default_rng(1)
+    A = A[rng.choice(len(A), 4000, replace=False)]
+    tv = target[rng.choice(len(target), min(4000, len(target)), replace=False)]
+    tree = cKDTree(tv)
+    ct = tv.mean(0) * [1, 0, 1]
+    s0 = (np.ptp(tv[:, 0]) / np.ptp(A[:, 0]))
+    best = None
+    for ang in np.radians(np.arange(-45, 46, 3)):
+        for s in s0 * np.array([0.85, 0.92, 1.0, 1.08, 1.16]):
+            c, sn = np.cos(ang), np.sin(ang)
+            R = np.array([[c, 0, -sn], [0, 1, 0], [sn, 0, c]])
+            X = (A - A.mean(0) * [1, 0, 1]) @ R.T * s + ct
+            d = tree.query(X)[0].mean() + cKDTree(X).query(tv)[0].mean()
+            if best is None or d < best[0]:
+                best = (d, R, s)
+    d, R, s = best
+    off = ct - (A.mean(0) * [1, 0, 1]) @ R.T * s
+    return parts, (lambda V: V @ R.T * s + off), d
+
+
 # ─── 本体 ─────────────────────────────────────────────────────────────
 
 def main():
@@ -373,11 +436,34 @@ def main():
         recs[key].update(CREDIT_ORGAN[key])
         print("臓器 %-6s 当てはめ後の平均のずれ %.1f mm" % (key, err))
 
-    out = [recs[b["id"]] for b in bones]
+    # 脳: 模型の大脳・小脳・脳幹を、アトラスの部位に置き換える
+    tgt = np.concatenate([decode(recs[k])[0] for k in ("cerebrum", "cerebellum", "brainstem")]
+                         + [decode(recs["cerebrum"])[0] * [1, -1, 1]])
+    parts, place, d = fit_brain(tgt)
+    print("脳 当てはめ後の平均のずれ %.1f mm" % (d / 2))
+    brain_recs = []
+    for k, ja, la, col, paired, note in BRAIN:
+        V, T = parts[k]
+        r = dict(id=k, ja=ja, la=la, path=["臓器", "神経系", "脳"], paired=paired, note=note,
+                 layer="organ", color=col, alpha=1.0)
+        encode(r, place(V), T)
+        r.update(CREDIT_BRAIN)
+        brain_recs.append(r)
+
+    out = []
+    for b in bones:
+        if b["id"] == "cerebrum":
+            out += brain_recs
+        elif b["id"] in ("cerebellum", "brainstem"):
+            continue
+        else:
+            out.append(recs[b["id"]])
     credits = [
         dict(what="実物スキャンの骨（頭蓋骨・下顎骨・環椎・第7頸椎・第1腰椎・肋骨4本・肩甲骨・上腕骨・橈骨・尺骨・寛骨・大腿骨・脛骨・腓骨）",
              who="Massey University 3D Dog Bone Project (nzfauna)", license="CC BY-SA 4.0",
              url=CREDIT_MASSEY["url"], mod="骨ごとに分割・間引き・座標変換。一部の骨は形を流用して変形"),
+        dict(what="脳（大脳の各葉・帯状回・嗅球・白質・小脳・脳幹）", who="Johnson, P. J. & Barry, E. F. (2019) Cortical Atlas of the Canine Brain, Cornell University（30頭のMRI平均）",
+             license="CC0 1.0", url=CREDIT_BRAIN["url"], mod="ラベルから表面を作成、部位の分け方（小脳・嗅球・脳幹）は位置による目安、頭蓋の中へ配置"),
         dict(what="肝臓（CT）", who="3DVet_Printing", license="CC BY 4.0", url=CREDIT_ORGAN["liver"]["url"],
              mod="間引き・体内の位置へ移動と拡大縮小"),
         dict(what="心臓（大血管の根元を含む）", who="atugman", license="CC BY 4.0", url=CREDIT_ORGAN["heart"]["url"],

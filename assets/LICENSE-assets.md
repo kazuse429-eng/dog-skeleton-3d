@@ -7,6 +7,7 @@
 |---|---|---|
 | scan/skull, mandible, C1, C7, L1, rib1/4/9/13, scapula, humerus, radius, ulna, ilium_all, femur, tibia, fibula | Massey University "3D Dog Bone Project: Partial Dog Skeleton" (nzfauna) https://sketchfab.com/3d-models/3d-dog-bone-project-partial-dog-skeleton-65a6c5db1c4c477aba475af5d86d59a5 | CC BY-SA 4.0 |
 | scan/organ_liver | "Dog, Liver" by 3DVet_Printing https://sketchfab.com/3d-models/dog-liver-b0836f9e9ec645a0971f7fb9629d7e44 | CC BY 4.0 |
+| scan/brain_* | Johnson, P. J. & Barry, E. F. (2019) Cortical Atlas of the Canine Brain, Cornell University https://doi.org/10.7298/4t8z-aw34 | CC0 1.0（引用のお願いあり） |
 | scan/organ_heart_atugman | "Normal Canine Heart" by atugman https://sketchfab.com/3d-models/normal-canine-heart-acb173cf049448d4ae927ddea2a89753 | CC BY 4.0 |
 
 改変: 骨ごとの分割、ポリゴンの間引き、座標変換、体内への配置と拡大縮小。

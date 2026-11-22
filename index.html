@@ -2,9 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>犬の骨格・臓器 3D — 名前から選べるビューア</title>
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14171c">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 </head>
 <body>
 <div id="app">
@@ -30,26 +34,29 @@
     <section id="quiz" hidden></section>
     <section id="credits" hidden></section>
     <div id="toolbar">
-      <button id="btn-side" class="side-btn" title="骨の名前の一覧を開く／閉じる">☰ 一覧</button>
+      <button id="btn-side" class="side-btn" title="名前の一覧を開く／閉じる">☰<span class="lbl-t"> 一覧</span></button>
       <div class="seg" role="group" aria-label="表示するもの">
         <button data-layer="bone" class="on">骨格</button>
         <button data-layer="organ">臓器</button>
         <button data-layer="both">両方</button>
       </div>
-      <div class="seg" role="group" aria-label="選んでいない骨の表示">
-        <button data-mode="dim" class="on">周りを薄く</button>
-        <button data-mode="only">選んだ骨だけ</button>
-        <button data-mode="all">全部そのまま</button>
+      <button id="btn-quiz" class="quiz-btn" title="クイズで覚える">🎯<span class="lbl-t"> クイズ</span></button>
+      <button id="btn-labels" class="side-btn" title="3D の上に名前を表示">🏷<span class="lbl-t"> 名前</span></button>
+      <button id="btn-more" class="side-btn" title="表示の設定">⋯</button>
+      <div id="more">
+        <div class="seg" role="group" aria-label="選んでいないものの表示">
+          <button data-mode="dim" class="on">周りを薄く</button>
+          <button data-mode="only">選んだものだけ</button>
+          <button data-mode="all">全部そのまま</button>
+        </div>
+        <div class="seg" role="group" aria-label="視点">
+          <button data-view="left">左</button>
+          <button data-view="front">前</button>
+          <button data-view="top">上</button>
+          <button data-view="persp">斜め</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="spin"> 自動回転</label>
       </div>
-      <div class="seg" role="group" aria-label="視点">
-        <button data-view="left">左</button>
-        <button data-view="front">前</button>
-        <button data-view="top">上</button>
-        <button data-view="persp">斜め</button>
-      </div>
-      <label class="chk"><input type="checkbox" id="spin"> 自動回転</label>
-      <button id="btn-labels" class="side-btn" title="3D の上に名前を表示">🏷 名前</button>
-      <button id="btn-quiz" class="quiz-btn" title="クイズで覚える">🎯 クイズ</button>
     </div>
     <section id="card" hidden>
       <button id="card-close" aria-label="閉じる">×</button>
